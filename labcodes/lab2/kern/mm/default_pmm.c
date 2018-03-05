@@ -116,18 +116,6 @@ default_alloc_pages(size_t n) {
 
 static void
 default_free_pages(struct Page *base, size_t n) {
-		
-	cprintf("Before Free %d list: \n", n);
-	list_entry_t *p;
-	struct Page *pp;
-	int count = 0;
-	for (p = list_next(&free_list); p != &free_list; p = list_next(p)) {
-		pp = le2page(p, page_link);
-		if (pp->property) cprintf("%x:%d ", pp, pp->property);
-		count++;
-	}
-	cprintf("\n");
-	
 	assert(n > 0);
 	assert(PageReserved(base));
 
@@ -168,15 +156,6 @@ default_free_pages(struct Page *base, size_t n) {
 		page_prev->property += base->property;
 		base->property = 0;
 	}
-
-	
-	cprintf("After Free %d list: \n", n);
-	for (p = list_next(&free_list); p != &free_list; p = list_next(p)) {
-		pp = le2page(p, page_link);
-		if (pp->property) cprintf("%x:%d ", pp, pp->property);
-	}
-	cprintf("\n");
-	
 }
 
 static size_t
