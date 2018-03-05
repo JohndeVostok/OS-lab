@@ -149,6 +149,8 @@ print_pgfault(struct trapframe *tf) {
             (tf->tf_err & 1) ? "protection fault" : "no page found");
 }
 
+static int count = 0;
+
 static int
 pgfault_handler(struct trapframe *tf) {
     extern struct mm_struct *check_mm_struct;
@@ -186,6 +188,12 @@ trap_dispatch(struct trapframe *tf) {
          * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
          * (3) Too Simple? Yes, I think so!
          */
+		count++;
+		if (count == TICK_NUM)
+		{
+			print_ticks();
+			count = 0;
+		}
         break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();
