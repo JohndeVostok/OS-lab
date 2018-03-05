@@ -90,10 +90,9 @@ default_alloc_pages(size_t n) {
     if (n > nr_free) {
         return NULL;
     }
-    list_entry_t *le = &free_list;
-    list_entry_t *le_next = NULL;
+    list_entry_t *le, *le_next;
 
-	while ((le = list_next(le)) != &free_list) {
+	for (le = list_next(&free_list); le != &free_list; le = list_next(le)) {
         struct Page *page_base = le2page(le, page_link);
 		if (page_base->property >= n) {
             int i;
@@ -105,20 +104,10 @@ default_alloc_pages(size_t n) {
 				list_del(le);
 				le = le_next;
 			}
-			le2page(le, page_link)->property = page_base->property - n;
-			nr_free -= n;
-
-			cprintf("Alloc %d list: \n", n);
-			list_entry_t *p;
-			struct Page *pp;
-			int count = 0;
-			for (p = list_next(&free_list); p != &free_list; p = list_next(p)) {
-				pp = le2page(p, page_link);
-				if (pp->property) cprintf("%x:%d ", pp, pp->property);
-				count++;
+			if (page_base->property > n) {
+				le2page(le, page_link)->property = page_base->property - n;
 			}
-			cprintf("\nTotal: %x %x %d\n", &free_list, list_next(&free_list), count);
-		
+			nr_free -= n;
 			return page_base;
 		}
     }
@@ -137,7 +126,7 @@ default_free_pages(struct Page *base, size_t n) {
 		if (pp->property) cprintf("%x:%d ", pp, pp->property);
 		count++;
 	}
-	cprintf("Total: %x %x %d \n", &free_list, list_next(&free_list), count);
+	cprintf("\n");
 	
 	assert(n > 0);
 	assert(PageReserved(base));
@@ -150,7 +139,6 @@ default_free_pages(struct Page *base, size_t n) {
 		if (page_next > base) break;
 	}
 
-	cprintf("Next_page: %x %x %d\n", base, page_next, page_next->property);
 
 	struct Page *page;
 	for (page = base; page < base + n; page++) {
