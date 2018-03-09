@@ -420,8 +420,12 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
 
 	proc = alloc_proc();
 
-	if (!proc) goto fork_out;
+	if (!proc) {
+		goto fork_out;
+	}
 	proc->parent = current;
+
+	assert(!current->wait_state);
 
 	if (setup_kstack(proc)) {
 		goto bad_fork_cleanup_proc;
@@ -437,8 +441,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
 	local_intr_save(flag);
 	proc->pid = get_pid();
 	hash_proc(proc);
-	list_add(&proc_list, &(proc->list_link));
-	nr_process++;
+	set_links(proc);
 	local_intr_restore(flag);
 
 	wakeup_proc(proc);
