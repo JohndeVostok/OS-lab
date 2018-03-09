@@ -53,6 +53,9 @@ idt_init(void) {
       *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
+     /* LAB5 YOUR CODE */ 
+     //you should update your lab1 code (just add ONE or TWO lines of code), let user app to use syscall to get the service of ucore
+     //so you should setup the syscall interrupt gate in here
 	extern uintptr_t __vectors[];
 	int i;
 	for (i = 0; i < 256; i++) {
@@ -63,9 +66,6 @@ idt_init(void) {
 		}
 	}
 	lidt(&idt_pd);
-     /* LAB5 YOUR CODE */ 
-     //you should update your lab1 code (just add ONE or TWO lines of code), let user app to use syscall to get the service of ucore
-     //so you should setup the syscall interrupt gate in here
 }
 
 static const char *
