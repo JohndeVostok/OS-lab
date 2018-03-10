@@ -133,6 +133,14 @@ alloc_proc(void) {
 		memset(proc->name, 0, PROC_NAME_LEN);
     	proc->wait_state = 0;
 		proc->cptr = proc->yptr = proc->optr = 0;
+		proc->rq = 0;
+		list_init(&proc->run_link);
+		proc->time_slice = 0;
+		proc->lab6_run_pool.left = 0;
+		proc->lab6_run_pool.right = 0;
+		proc->lab6_run_pool.parent = 0;
+		proc->lab6_stride = 0;
+		proc->lab6_priority = 0;
 	}
     return proc;
 }
@@ -916,6 +924,7 @@ cpu_idle(void) {
 void
 lab6_set_priority(uint32_t priority)
 {
+	cprintf("??Priority: %d %d\n", current->lab6_priority, priority);
     if (priority == 0)
         current->lab6_priority = 1;
     else current->lab6_priority = priority;

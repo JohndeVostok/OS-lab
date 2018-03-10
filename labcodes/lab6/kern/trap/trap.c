@@ -193,8 +193,6 @@ pgfault_handler(struct trapframe *tf) {
 static volatile int in_swap_tick_event = 0;
 extern struct mm_struct *check_mm_struct;
 
-static int count = 0;
-
 static void
 trap_dispatch(struct trapframe *tf) {
     char c;
@@ -241,13 +239,9 @@ trap_dispatch(struct trapframe *tf) {
          * IMPORTANT FUNCTIONS:
 	     * sched_class_proc_tick
          */
-		count++;
-		if (count == TICK_NUM) {
-			count = 0;
-			assert(current != 0);
-			current->need_resched = 1;
-		}
-        break;
+		ticks++;
+		assert(current != 0);
+		break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();
         cprintf("serial [%03d] %c\n", c, c);
