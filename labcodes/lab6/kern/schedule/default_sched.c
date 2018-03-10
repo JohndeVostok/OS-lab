@@ -124,8 +124,6 @@ stride_pick_next(struct run_queue *rq) {
 	}
 	struct proc_struct *proc = le2proc(rq->lab6_run_pool, lab6_run_pool);
 	
-	cprintf("!!Priority: %d %d\n", proc->lab6_priority, proc->lab6_stride);
-
 	if (proc->lab6_priority == 0) {
 		proc->lab6_stride += BIG_STRIDE;
 	} else {

@@ -924,7 +924,6 @@ cpu_idle(void) {
 void
 lab6_set_priority(uint32_t priority)
 {
-	cprintf("??Priority: %d %d\n", current->lab6_priority, priority);
     if (priority == 0)
         current->lab6_priority = 1;
     else current->lab6_priority = priority;
