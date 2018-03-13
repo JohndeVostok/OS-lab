@@ -54,7 +54,7 @@ mm_create(void) {
         else mm->sm_priv = NULL;
         
         set_mm_count(mm, 0);
-        sem_init(&(mm->mm_sem), 1);
+        lock_init(&(mm->mm_lock));
     }    
     return mm;
 }
@@ -493,6 +493,34 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
         }
    }
 #endif
+	ptep = get_pte(mm->pgdir, addr, 1);
+	struct Page *page;
+
+	if (!ptep) {
+		cprintf("GET PTE FAILED.\n");
+		return ret;
+	}
+	if (!*ptep) {
+		page = pgdir_alloc_page(mm->pgdir, addr, perm);
+		if (!page) {
+			cprintf("ALLOC PAGE FAILED.\n");
+			return ret;
+		}
+	} else {
+		if (swap_init_ok) {
+			ret = swap_in(mm, addr, &page);
+			if (ret) {
+				cprintf("SWAP IN FAILED.\n");
+				return ret;
+			}
+			page_insert(mm->pgdir, page, addr, perm);
+			swap_map_swappable(mm, addr, page, 1);
+			page->pra_vaddr = addr;
+		} else {
+			cprintf("SWAP INIT FAILED. PTEP: %x\n", *ptep);
+			return ret;
+		}
+	}
    ret = 0;
 failed:
     return ret;

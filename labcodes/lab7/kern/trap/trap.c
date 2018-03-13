@@ -57,6 +57,16 @@ idt_init(void) {
      /* LAB5 YOUR CODE */ 
      //you should update your lab1 code (just add ONE or TWO lines of code), let user app to use syscall to get the service of ucore
      //so you should setup the syscall interrupt gate in here
+	extern uintptr_t __vectors[];
+	int i;
+	for (i = 0; i < 256; i++) {
+		if (i == 0x80) {
+			SETGATE(idt[i], 1, GD_KTEXT, __vectors[i], 3);
+		} else {
+			SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], 0);
+		}
+	}
+	lidt(&idt_pd);
 }
 
 static const char *
@@ -234,7 +244,10 @@ trap_dispatch(struct trapframe *tf) {
          * IMPORTANT FUNCTIONS:
 	     * run_timer_list
          */
-        break;
+		ticks++;
+		assert(current != 0);
+		sched_class_proc_tick(current);
+		break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();
         cprintf("serial [%03d] %c\n", c, c);
