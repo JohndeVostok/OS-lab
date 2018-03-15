@@ -145,6 +145,7 @@ alloc_proc(void) {
 		proc->lab6_run_pool.parent = 0;
 		proc->lab6_stride = 0;
 		proc->lab6_priority = 0;
+		proc->filesp = 0;
 	}
     return proc;
 }
@@ -625,6 +626,203 @@ load_icode(int fd, int argc, char **kargv) {
      * (7) setup trapframe for user environment
      * (8) if up steps failed, you should cleanup the env.
      */
+
+	assert(argc >= 0 && argc <= EXEC_MAX_ARG_NUM);
+	assert(current->mm != 0);
+
+	int ret;
+	struct mm_struct *mm;
+	struct Page *page;
+	struct elfhdr __elf, *elf = &__elf;
+	struct proghdr __ph, *ph = &__ph;
+
+	ret = -E_NO_MEM;
+	mm = mm_create();
+	if (mm == 0) {
+		return ret;
+	}
+	if (setup_pgdir(mm)) {
+		mm_destroy(mm);
+		return ret;
+	}
+
+	ret = load_icode_read(fd, elf, sizeof(struct elfhdr), 0);
+	if (ret) {
+		put_pgdir(mm);
+		mm_destroy(mm);
+		return ret;
+	}
+
+	if (elf->e_magic != ELF_MAGIC) {
+		ret = -E_INVAL_ELF;
+		put_pgdir(mm);
+		mm_destroy(mm);
+		return ret;
+	}
+
+	int i;
+	off_t phoff, offset;
+	int flags, perm;
+	for (i = 0; i < elf->e_phnum; i++) {
+		phoff = elf->e_phoff + i * (sizeof(struct proghdr));
+		ret = load_icode_read(fd, ph, sizeof(struct proghdr), phoff);
+		if (ret) {
+			exit_mmap(mm);
+			put_pgdir(mm);
+			mm_destroy(mm);
+			return ret;
+		}
+		if (ph->p_type != ELF_PT_LOAD) {
+			continue;
+		}
+		if (ph->p_filesz > ph->p_memsz) {
+			ret = -E_INVAL_ELF;
+			exit_mmap(mm);
+			put_pgdir(mm);
+			mm_destroy(mm);
+			return ret;
+		}
+		if (!ph->p_filesz) {
+			continue;
+		}
+
+		flags = 0;
+		perm = PTE_U;
+		if (ph->p_flags & ELF_PF_X) {
+			flags |= VM_EXEC;
+		}
+		if (ph->p_flags & ELF_PF_W) {
+			flags |= VM_WRITE;
+		}
+		if (ph->p_flags & ELF_PF_R) {
+			flags |= VM_READ;
+		}
+		if (flags & VM_WRITE) {
+			perm |= PTE_W;
+		}
+		ret = mm_map(mm, ph->p_va, ph->p_memsz, flags, 0);
+		if (ret) {
+			exit_mmap(mm);
+			put_pgdir(mm);
+			mm_destroy(mm);
+			return ret;
+		}
+		offset = ph->p_offset;
+		size_t off, size;
+		uintptr_t start, end, la;
+		start = ph->p_va;
+		end = ph->p_va + ph->p_filesz;
+		la = ROUNDDOWN(start, PGSIZE);
+		while (start < end) {
+			page = pgdir_alloc_page(mm->pgdir, la, perm);
+			if (!page) {
+				ret = -E_NO_MEM;
+				exit_mmap(mm);
+				put_pgdir(mm);
+				mm_destroy(mm);
+				return ret;
+			}
+			off = end - la;
+			size = PGSIZE - off;
+			la += PGSIZE;
+			if (end < la) {
+				size -= la - end;
+			}
+			ret = load_icode_read(fd, page2kva(page) + off, size, offset);
+			if (ret) {
+				exit_mmap(mm);
+				put_pgdir(mm);
+				mm_destroy(mm);
+				return ret;
+			}
+			start += size;
+			offset += size;
+		}
+
+		end = ph->p_va + ph->p_memsz;
+		if (start < la) {
+			if (start < end) {
+				continue;
+			}
+			off = start + PGSIZE - la;
+			size = PGSIZE - off;
+			if (end < la) {
+				size -= la - end;
+			}
+			memset(page2kva(page) + off, 0, size);
+			start += size;
+			assert((end < la && start == end) || (end >= la && start == la));
+		}
+		while (start < end) {
+			page = pgdir_alloc_page(mm->pgdir, la, perm);
+			if (!page) {
+				ret = -E_NO_MEM;
+				exit_mmap(mm);
+				put_pgdir(mm);
+				mm_destroy(mm);
+				return ret;
+			}
+			off = start - la;
+			size = PGSIZE - off;
+			la += PGSIZE;
+			if (end < la) {
+				size -= la - end;
+			}
+			memset(page2kva(page) + off, 0, size);
+			start += size;
+		}
+	}
+	sysfile_close(fd);
+	
+	flags = VM_READ | VM_WRITE | VM_STACK;
+    if ((ret = mm_map(mm, USTACKTOP - USTACKSIZE, USTACKSIZE, flags, NULL)) != 0) {
+        goto bad_cleanup_mmap;
+    }
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-2*PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-3*PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-4*PGSIZE , PTE_USER) != NULL);
+    mm_count_inc(mm);
+    current->mm = mm;
+    current->cr3 = PADDR(mm->pgdir);
+    lcr3(PADDR(mm->pgdir));
+
+	uint32_t argv_size;
+	argv_size = 0;
+	for (i = 0; i < argc; i++) {
+		argv_size += strnlen(kargv[i], EXEC_MAX_ARG_LEN + 1) + 1;
+	}
+
+	uintptr_t stacktop = USTACKTOP - (argv_size / sizeof(long) + 1) * sizeof(long);
+	char **uargv = (char**)(stacktop - argc * sizeof(char *));
+	argv_size = 0;
+	for (i = 0; i < argc; i++) {
+		uargv[i] = strcpy((char*)(stacktop + argv_size), kargv[i]);
+		argv_size += strnlen(kargv[i], EXEC_MAX_ARG_LEN + 1) + 1;
+	}
+
+	stacktop = (uintptr_t) uargv - sizeof(int);
+	*(int *) stacktop = argc;
+	
+
+    struct trapframe *tf = current->tf;
+    memset(tf, 0, sizeof(struct trapframe));
+	tf->tf_cs = USER_CS;
+	tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+	tf->tf_esp = USTACKTOP;
+	tf->tf_eip = elf->e_entry;
+	tf->tf_eflags = FL_IF;
+    ret = 0;
+out:
+    return ret;
+bad_cleanup_mmap:
+    exit_mmap(mm);
+bad_elf_cleanup_pgdir:
+    put_pgdir(mm);
+bad_pgdir_cleanup_mm:
+    mm_destroy(mm);
+bad_mm:
+    goto out;
 }
 
 // this function isn't very correct in LAB8
