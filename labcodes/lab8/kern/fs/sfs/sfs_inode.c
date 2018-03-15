@@ -628,7 +628,7 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
 			goto out;
 		}
 
-		ret = sfs_block_op(sfs, buf, ino, 0);
+		ret = sfs_block_op(sfs, buf, ino, 1);
 		if (ret) {
 			goto out;
 		}
