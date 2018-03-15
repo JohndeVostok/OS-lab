@@ -733,38 +733,38 @@ load_icode(int fd, int argc, char **kargv) {
     uint32_t argv_size=0, i;
     for (i = 0; i < argc; i ++) {
         argv_size += strnlen(kargv[i],EXEC_MAX_ARG_LEN + 1)+1;
-    }
+	}
 
-    uintptr_t stacktop = USTACKTOP - (argv_size/sizeof(long)+1)*sizeof(long);
-    char** uargv=(char **)(stacktop  - argc * sizeof(char *));
-    
-    argv_size = 0;
-    for (i = 0; i < argc; i ++) {
-        uargv[i] = strcpy((char *)(stacktop + argv_size ), kargv[i]);
-        argv_size +=  strnlen(kargv[i],EXEC_MAX_ARG_LEN + 1)+1;
-    }
-    
-    stacktop = (uintptr_t)uargv - sizeof(int);
-    *(int *)stacktop = argc;
-    
-    struct trapframe *tf = current->tf;
-    memset(tf, 0, sizeof(struct trapframe));
-    tf->tf_cs = USER_CS;
-    tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
-    tf->tf_esp = stacktop;
-    tf->tf_eip = elf->e_entry;
-    tf->tf_eflags = FL_IF;
-    ret = 0;
+	uintptr_t stacktop = USTACKTOP - (argv_size/sizeof(long)+1)*sizeof(long);
+	char** uargv=(char **)(stacktop  - argc * sizeof(char *));
+
+	argv_size = 0;
+	for (i = 0; i < argc; i ++) {
+		uargv[i] = strcpy((char *)(stacktop + argv_size ), kargv[i]);
+		argv_size +=  strnlen(kargv[i],EXEC_MAX_ARG_LEN + 1)+1;
+	}
+
+	stacktop = (uintptr_t)uargv - sizeof(int);
+	*(int *)stacktop = argc;
+
+	struct trapframe *tf = current->tf;
+	memset(tf, 0, sizeof(struct trapframe));
+	tf->tf_cs = USER_CS;
+	tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+	tf->tf_esp = stacktop;
+	tf->tf_eip = elf->e_entry;
+	tf->tf_eflags = FL_IF;
+	ret = 0;
 out:
-    return ret;
+	return ret;
 bad_cleanup_mmap:
-    exit_mmap(mm);
+	exit_mmap(mm);
 bad_elf_cleanup_pgdir:
-    put_pgdir(mm);
+	put_pgdir(mm);
 bad_pgdir_cleanup_mm:
-    mm_destroy(mm);
+	mm_destroy(mm);
 bad_mm:
-    goto out;
+	goto out;
 }
 
 // this function isn't very correct in LAB8
