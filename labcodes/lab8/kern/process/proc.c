@@ -498,8 +498,12 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
 		goto bad_fork_cleanup_proc;
 	}
 
-	if (copy_mm(clone_flags, proc)) {
+	if (copy_files(clone_flags, proc)) {
 		goto bad_fork_cleanup_kstack;
+	}
+
+	if (copy_mm(clone_flags, proc)) {
+		goto bad_fork_cleanup_fs;
 	}
 
 	copy_thread(proc, stack, tf);
