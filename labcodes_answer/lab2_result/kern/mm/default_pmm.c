@@ -253,7 +253,7 @@ default_check(void) {
 
     p2 = p0 + 1;
     free_page(p0);
-    free_pages(p1, 3);
+    free_pages(p1, 3);1
     assert(PageProperty(p0) && p0->property == 1);
     assert(PageProperty(p1) && p1->property == 3);
 

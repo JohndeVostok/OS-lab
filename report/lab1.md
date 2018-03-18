@@ -147,7 +147,9 @@ $(call create_target,ucore.img)
 
 ###使用qemu执行并调试lab1中的软件
 
-1、修改gdbinit
+由于我的linux环境是远端的ubuntu，没有图形界面，通过ssh访问，make debug不能够直接使用，这部分实验我是在其他同学的ubuntu上面做的，并没有直接使用我自己的代码运行，但是由于此处不需要任何自己写的代码支持，所以应该也没什么问题。实际我在后续实验的调试过程中，也没用到make debug这个东西，我更多的依靠读代码和打印中间变量来调试。
+
+修改gdbinit
 
 ```gdb
 define hook-stop
@@ -156,7 +158,107 @@ end
 target remote localhost:1234
 ```
 
+1、从CPU加电第一条指令开始，单步跟踪BIOS执行
 
+make debug
+
+si
+
+即可开始单步执行
+
+2、在初始化位置0x7c00设置实地址断点,测试断点正常。
+
+make debug
+
+b *0x7c00
+
+c
+
+si
+
+```gdb
+=> 0x7c01:      cld
+0x00007c01 in ?? ()
+=> 0x7c02:      xor    %eax,%eax
+0x00007c02 in ?? ()
+=> 0x7c04:      mov    %eax,%ds
+0x00007c04 in ?? ()
+=> 0x7c06:      mov    %eax,%es
+0x00007c06 in ?? ()
+=> 0x7c08:      mov    %eax,%ss
+```
+
+3、从0x7c00开始跟踪代码运行,将单步跟踪反汇编得到的代码与bootasm.S和 bootblock.asm进行比较。
+
+c
+
+si
+
+```gdb
+(gdb) c
+Continuing.
+=> 0x7c00:	cli    
+Breakpoint 1, 0x00007c00 in ?? ()
+(gdb) si
+=> 0x7c01:	cld    
+0x00007c01 in ?? ()
+(gdb)
+=> 0x7c02:	xor    %eax,%eax
+0x00007c02 in ?? ()
+(gdb)
+=> 0x7c04:	mov    %eax,%ds
+0x00007c04 in ?? ()
+(gdb)
+=> 0x7c06:	mov    %eax,%es
+0x00007c06 in ?? ()
+(gdb)
+=> 0x7c08:	mov    %eax,%ss
+0x00007c08 in ?? ()
+(gdb)
+...
+...
+```
+
+与bootblock.asm一致
+
+4、自己找一个bootloader或内核中的代码位置，设置断点并进行测试。
+
+设置断点0x7d0d
+
+```gdb
+(gdb) c
+Continuing.
+=> 0x7d0d:	push   %ebp
+Breakpoint 1, 0x00007d0d in ?? ()
+(gdb) si
+=> 0x7d0e:	xor    %ecx,%ecx
+0x00007d0e in ?? ()
+(gdb)
+=> 0x7d10:	mov    $0x1000,%edx
+0x00007d10 in ?? ()
+(gdb)
+=> 0x7d15:	mov    $0x10000,%eax
+0x00007d15 in ?? ()
+...
+...
+```
+
+
+```c
+ /* bootmain - the entry of bootloader */
+void
+bootmain(void) {
+    7d0d:   55                      push   %ebp
+    // read the 1st page off disk
+    readseg((uintptr_t)ELFHDR, SECTSIZE * 8, 0);
+    7d0e:   31 c9                   xor    %ecx,%ecx
+    7d10:   ba 00 10 00 00          mov    $0x1000,%edx
+    7d15:   b8 00 00 01 00          mov    $0x10000,%eax
+    }
+}
+```
+
+两者一致
 
 ### 分析bootloader进入保护模式的过程
 
