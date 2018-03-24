@@ -145,10 +145,177 @@ RR_proc_tick(struct run_queue *rq, struct proc_struct *proc) {
 
 ### 实现 Stride Scheduling 调度算法
 
-1、
+1、可以参考上述RR算法进行对比。
 
+proc_stride_comp_f是优先队列中用来进行比较的函数，就是根据优先度排序
 
+init是初始化，和原来的一致。
+
+enqueue是插入，插入优先队列。
+
+dequeue是删除，同时从优先队列删除。
+
+pick_next选取下一个进程，同时根据优先级填写时间片，这部分通过用一个大常数除以优先度。此处大常数我本来设置为一个阶乘，后来发现没有意义就改成了0x7fffffff。
+
+proc_tick和之前的一致。
+
+简单来说，Stride Scheduling就是使用了优先队列来代替链表，根据有限度选择调度进程，从而实现了进程调度。
+
+```c
+static int
+proc_stride_comp_f(void *a, void *b)
+{
+	struct proc_struct *p = le2proc(a, lab6_run_pool);
+	struct proc_struct *q = le2proc(b, lab6_run_pool);
+	int32_t c = p->lab6_stride - q->lab6_stride;
+	if (c > 0) return 1;
+	else if (c == 0) return 0;
+	else return -1;
+}
+
+static void
+stride_init(struct run_queue *rq) {
+	list_init(&rq->run_list);
+	rq->lab6_run_pool = 0;
+	rq->proc_num = 0;
+}
+
+static void
+stride_enqueue(struct run_queue *rq, struct proc_struct *proc) {
+	rq->lab6_run_pool = skew_heap_insert(rq->lab6_run_pool, &proc->lab6_run_pool, proc_stride_comp_f);
+	if (proc->time_slice == 0 || proc->time_slice > rq->max_time_slice) {
+		proc->time_slice = rq->max_time_slice;
+	}
+	proc->rq = rq;
+	rq->proc_num ++;
+}
+
+static void
+stride_dequeue(struct run_queue *rq, struct proc_struct *proc) {
+	rq->lab6_run_pool = skew_heap_remove(rq->lab6_run_pool, &proc->lab6_run_pool, proc_stride_comp_f);
+	rq->proc_num--;
+}
+
+static struct proc_struct *
+stride_pick_next(struct run_queue *rq) {
+	if (!rq->lab6_run_pool) {
+		return 0;
+	}
+	struct proc_struct *proc = le2proc(rq->lab6_run_pool, lab6_run_pool);
+
+	if (proc->lab6_priority == 0) {
+		proc->lab6_stride += BIG_STRIDE;
+	} else {
+		proc->lab6_stride += BIG_STRIDE / proc->lab6_priority;
+	}
+	return proc;
+}
+
+static void
+stride_proc_tick(struct run_queue *rq, struct proc_struct *proc) {
+	if (proc->time_slice > 0) {
+		proc->time_slice --;
+	}
+	if (proc->time_slice == 0) {
+		proc->need_resched = 1;
+	}
+}
+```
+
+### 实验框架更改
+
+kern/schedule/sched.c
+
+去掉static使该方法可以应用于其他文件
+
+```c
+void
+sched_class_proc_tick(struct proc_struct *proc) {
+	if (proc != idleproc) {
+		sched_class->proc_tick(rq, proc);
+```
+kern/schedule/sched.h
+
+添加函数头
+
+```c
+void sched_class_proc_tick(struct proc_struct *proc);
+```
+
+在以上修改的同时，修改了答案
+kern/trap/trap.c
+
+此修改如果不进行，时钟中断时候不会进行调度。退化成了简单的轮转。
+具体讨论见[pull request](https://github.com/chyyuu/ucore_os_lab/pull/35/)
+
+```c
+ticks ++;
+assert(current != NULL);
+sched_class_proc_tick(current);
+break;
+```
 
 ## 实验结果
 
+由于我的实验环境问题，badsegment没有qemu输出，应该换正常的实验环境即可。
+
+```shell
+john:lab6/ (master) $ make grade                                     [15:49:56]
+badsegment:              (4.4s)
+  -check result:                             no $qemu_out
+divzero:                 (1.6s)
+  -check result:                             OK
+  -check output:                             OK
+softint:                 (1.7s)
+  -check result:                             OK
+  -check output:                             OK
+faultread:               (1.8s)
+  -check result:                             OK
+  -check output:                             OK
+faultreadkernel:         (2.4s)
+  -check result:                             OK
+  -check output:                             OK
+hello:                   (2.2s)
+  -check result:                             OK
+  -check output:                             OK
+testbss:                 (1.8s)
+  -check result:                             OK
+  -check output:                             OK
+pgdir:                   (1.7s)
+  -check result:                             OK
+  -check output:                             OK
+yield:                   (1.7s)
+  -check result:                             OK
+  -check output:                             OK
+badarg:                  (1.7s)
+  -check result:                             OK
+  -check output:                             OK
+exit:                    (1.7s)
+  -check result:                             OK
+  -check output:                             OK
+spin:                    (2.0s)
+  -check result:                             OK
+  -check output:                             OK
+waitkill:                (2.3s)
+  -check result:                             OK
+  -check output:                             OK
+forktest:                (1.7s)
+  -check result:                             OK
+  -check output:                             OK
+forktree:                (1.7s)
+  -check result:                             OK
+  -check output:                             OK
+matrix:                  (16.7s)
+  -check result:                             OK
+  -check output:                             OK
+priority:                (11.7s)
+  -check result:                             OK
+  -check output:                             OK
+Total Score: 160/165
+Makefile:314: recipe for target 'grade' failed
+make: *** [grade] Error 1
+```
+
 ## 实验总结
+
+经过lab4 lab5 lab6，完成了基本的线程管理，和程序运行调度。内核的基本功能完成。这一部分还需要之前的内存管理作为基础，才能够顺利进行。同时，也是后续两个实验的基础。
